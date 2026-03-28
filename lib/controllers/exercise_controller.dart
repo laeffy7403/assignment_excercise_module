@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/exercise.dart';
 import '../services/exercise_database_service.dart';
-import '../services/calorie_calculator.dart';
+import '../services/exercise_calorie_calculator.dart';
 
 class ExerciseController extends ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();

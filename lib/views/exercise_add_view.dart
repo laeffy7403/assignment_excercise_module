@@ -205,6 +205,13 @@ class _AddExerciseViewState extends State<AddExerciseView> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+
+            // ── ADDED: Custom title field ──
+            // Inline editable row — user types their own name here.
+            // If left blank, Exercise._generateDefaultTitle() auto-fills on save.
+            _buildTitleField(),
+            const Divider(height: 1),
+
             // Exercise Type
             _buildFieldRow(
               label: 'exercise',
@@ -307,6 +314,54 @@ class _AddExerciseViewState extends State<AddExerciseView> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── ADDED: title field widget ────────────────────────────────────────────────
+  // Styled to match the other rows but uses an inline TextField so the user
+  // can type freely without opening a separate dialog.
+  Widget _buildTitleField() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 110,
+            child: Text(
+              'Title',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          Expanded(
+            child: TextField(
+              controller: _titleController,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(fontSize: 14, color: Colors.black87),
+              decoration: InputDecoration(
+                hintText: 'e.g. Morning Walk',
+                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _titleController,
+                  builder: (_, value, __) => value.text.isNotEmpty
+                      ? GestureDetector(
+                    onTap: () => _titleController.clear(),
+                    child: const Icon(Icons.clear,
+                        size: 18, color: Colors.grey),
+                  )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,14 +1,112 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../controllers/exercise_controller.dart';
+import '../controllers/pedometer_controller.dart';
 import '../models/exercise.dart';
 import 'exercise_add_view.dart';
 import 'exercise_detail_view.dart';
 import 'exercise_live_view.dart';
-import 'goal_settings_view.dart';
+import 'exercise_goal_settings_view.dart';
 
-class ExerciseListView extends StatelessWidget {
+class ExerciseListView extends StatefulWidget {
   const ExerciseListView({Key? key}) : super(key: key);
+
+  @override
+  State<ExerciseListView> createState() => _ExerciseListViewState();
+}
+
+class _ExerciseListViewState extends State<ExerciseListView> {
+  @override
+  void initState() {
+    super.initState();
+    // NEW FEATURE: kick off background cadence monitor as soon as the list
+    // view is shown, so walks are detected even before a manual session.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pedometer =
+      Provider.of<PedometerController>(context, listen: false);
+      pedometer.startAutoDetect();
+    });
+  }
+
+  // NEW FEATURE: save the auto-detected walk as an Exercise record
+  Future<void> _saveAutoDetectedWalk(BuildContext context) async {
+    final pedometer =
+    Provider.of<PedometerController>(context, listen: false);
+    final exerciseController =
+    Provider.of<ExerciseController>(context, listen: false);
+
+    final startTime = pedometer.autoDetectStartTime ?? DateTime.now();
+    final durationMinutes =
+    DateTime.now().difference(startTime).inMinutes.clamp(1, 9999);
+    final steps = pedometer.autoDetectedSteps;
+
+    // Ask for a title before saving
+    String title = '';
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final titleController = TextEditingController(
+          text:
+          'Walk ${TimeOfDay.fromDateTime(startTime).format(context)}',
+        );
+        return AlertDialog(
+          title: const Text('Save detected walk'),
+          content: TextField(
+            controller: titleController,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              hintText: 'e.g. Afternoon Walk',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                pedometer.dismissAutoDetect();
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7C6FDC),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                title = titleController.text.trim();
+                Navigator.pop(ctx);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (title.isEmpty) return; // user cancelled
+
+    final exercise = Exercise(
+      title: title,
+      type: ExerciseType.walking,
+      startTime: startTime,
+      durationMinutes: durationMinutes,
+      steps: steps > 0 ? steps : null,
+    );
+
+    final success = await exerciseController.createExercise(exercise);
+    pedometer.resetAutoDetect();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Walk saved!' : 'Failed to save walk'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,31 +116,27 @@ class ExerciseListView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Padding(
               padding: const EdgeInsets.all(20.0),
-              child: Text(
-                'Exercise',
+              child: const Text(
+                'exercise',
                 style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.black87,
-                ),
+                    fontSize: 28,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.black87),
               ),
             ),
-
-            // Exercise List
             Expanded(
               child: Container(
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(30),
                     topRight: Radius.circular(30),
                   ),
                 ),
-                child: Consumer<ExerciseController>(
-                  builder: (context, controller, child) {
+                child: Consumer2<ExerciseController, PedometerController>(
+                  builder: (context, controller, pedometer, child) {
                     if (controller.isLoading) {
                       return const Center(child: CircularProgressIndicator());
                     }
@@ -50,30 +144,33 @@ class ExerciseListView extends StatelessWidget {
                     return ListView(
                       padding: const EdgeInsets.all(20),
                       children: [
-                        // Start Workout Button
+                        // ── NEW FEATURE: Auto-walk detection banner ──────────
+                        if (pedometer.isAutoWalkDetected)
+                          _buildAutoWalkBanner(context, pedometer),
+
+                        // Start Workout Card
                         _buildStartWorkoutCard(context),
                         const SizedBox(height: 24),
 
-                        // Today's Log Section
+                        // Today's Log
                         if (controller.todayExercises.isNotEmpty) ...[
-                          _buildSectionHeader('Today\'s Log'),
+                          _buildSectionHeader("Today's Log"),
                           const SizedBox(height: 16),
                           ...controller.todayExercises.map(
-                                (exercise) => _buildExerciseCard(context, exercise),
+                                (e) => _buildExerciseCard(context, e),
                           ),
                           const SizedBox(height: 24),
                         ],
 
-                        // Past Exercise Log Section
+                        // Past Log
                         if (controller.pastExercises.isNotEmpty) ...[
                           _buildSectionHeader('Past exercise Log'),
                           const SizedBox(height: 16),
                           ...controller.pastExercises.map(
-                                (exercise) => _buildExerciseCard(context, exercise),
+                                (e) => _buildExerciseCard(context, e),
                           ),
                         ],
 
-                        // Empty state
                         if (controller.exercises.isEmpty)
                           _buildEmptyState(context),
                       ],
@@ -85,42 +182,207 @@ class ExerciseListView extends StatelessWidget {
           ],
         ),
       ),
-
-      // Floating Action ADD Button
       floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 10.0),
+        padding: const EdgeInsets.only(bottom: 70.0),
         child: FloatingActionButton(
           onPressed: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => const AddExerciseView(),
-              ),
+                  builder: (context) => const AddExerciseView()),
             );
           },
           backgroundColor: const Color(0xFFD1D1D1),
           child: const Icon(Icons.add, color: Colors.white, size: 32),
         ),
       ),
-
-
-      // Bottom Navigation Bar
       bottomNavigationBar: _buildBottomNavBar(context),
     );
   }
+
+  // ── NEW FEATURE: Auto-walk banner ────────────────────────────────────────────
+  Widget _buildAutoWalkBanner(
+      BuildContext context, PedometerController pedometer) {
+    final startTime = pedometer.autoDetectStartTime;
+    final elapsed = startTime != null
+        ? DateTime.now().difference(startTime)
+        : Duration.zero;
+    final minutes = elapsed.inMinutes;
+    final steps = pedometer.autoDetectedSteps;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF43A047), Color(0xFF66BB6A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF43A047).withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child:
+                const Icon(Icons.directions_walk, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Walk detected!',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700),
+                ),
+              ),
+              // Dismiss X
+              GestureDetector(
+                onTap: () =>
+                    Provider.of<PedometerController>(context, listen: false)
+                        .dismissAutoDetect(),
+                child: const Icon(Icons.close, color: Colors.white70, size: 20),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          // Stats row
+          Row(
+            children: [
+              _buildBannerStat(
+                Icons.access_time,
+                '$minutes min',
+                'Duration',
+              ),
+              const SizedBox(width: 12),
+              if (steps > 0)
+                _buildBannerStat(
+                  Icons.directions_walk,
+                  '$steps',
+                  'Steps',
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // Action buttons
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => _saveAutoDetectedWalk(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Save Walk',
+                        style: TextStyle(
+                          color: Color(0xFF43A047),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    Provider.of<PedometerController>(context, listen: false)
+                        .resetAutoDetect();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const LiveExerciseView(
+                          exerciseType: ExerciseType.walking,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white60),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Track Live',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBannerStat(IconData icon, String value, String label) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.white70, size: 16),
+        const SizedBox(width: 4),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(value,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold)),
+            Text(label,
+                style:
+                const TextStyle(color: Colors.white70, fontSize: 11)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Existing widgets (unchanged) ────────────────────────────────────────────
 
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
       style: TextStyle(
-        fontSize: 16,
-        color: Colors.grey[600],
-        fontWeight: FontWeight.w400,
-      ),
+          fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.w400),
     );
   }
 
-// instant workout
   Widget _buildStartWorkoutCard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -144,65 +406,42 @@ class ExerciseListView extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.play_circle_filled,
-                color: Colors.white,
-                size: 32,
-              ),
+              const Icon(Icons.play_circle_filled, color: Colors.white, size: 32),
               const SizedBox(width: 12),
               const Text(
                 'Start a Workout',
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white),
               ),
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.settings, color: Colors.white),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const GoalSettingsView(),
-                    ),
-                  );
-                },
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const GoalSettingsView()),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 16),
           const Text(
             'Track your activity in real-time with GPS and step counting',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white70,
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.white70),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
               _buildQuickStartButton(
-                context,
-                ExerciseType.walking,
-                'Walking',
-                Icons.directions_walk,
-              ),
+                  context, ExerciseType.walking, 'Walking', Icons.directions_walk),
               const SizedBox(width: 12),
               _buildQuickStartButton(
-                context,
-                ExerciseType.jogging,
-                'Jogging',
-                Icons.run_circle,
-              ),
+                  context, ExerciseType.jogging, 'Jogging', Icons.run_circle),
               const SizedBox(width: 12),
               _buildQuickStartButton(
-                context,
-                ExerciseType.running,
-                'Running',
-                Icons.directions_run,
-              ),
+                  context, ExerciseType.running, 'Running', Icons.directions_run),
             ],
           ),
         ],
@@ -211,19 +450,17 @@ class ExerciseListView extends StatelessWidget {
   }
 
   Widget _buildQuickStartButton(
-      BuildContext context,
-      ExerciseType type,
-      String label,
-      IconData icon,
-      ) {
+      BuildContext context, ExerciseType type, String label, IconData icon) {
     return Expanded(
       child: GestureDetector(
         onTap: () {
+          // Reset auto-detect when user starts a manual session
+          Provider.of<PedometerController>(context, listen: false)
+              .resetAutoDetect();
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => LiveExerciseView(exerciseType: type),
-            ),
+                builder: (context) => LiveExerciseView(exerciseType: type)),
           );
         },
         child: Container(
@@ -231,23 +468,17 @@ class ExerciseListView extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.2),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.3),
-              width: 1,
-            ),
+            border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
           ),
           child: Column(
             children: [
               Icon(icon, color: Colors.white, size: 24),
               const SizedBox(height: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text(label,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500)),
             ],
           ),
         ),
@@ -255,90 +486,58 @@ class ExerciseListView extends StatelessWidget {
     );
   }
 
-
-// show in the log
   Widget _buildExerciseCard(BuildContext context, Exercise exercise) {
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ExerciseDetailView(exercise: exercise),
-          ),
-        );
-      },
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (context) => ExerciseDetailView(exercise: exercise)),
+      ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(16),
-        ),
+            color: Colors.grey[50], borderRadius: BorderRadius.circular(16)),
         child: Row(
           children: [
-            // Exercise Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Creation timestamp
                   Text(
                     'exercise created at ${exercise.formattedTime}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[500],
-                    ),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                   ),
                   const SizedBox(height: 6),
-
-                  // Exercise type
                   Text(
-                    exercise.type.displayName,
+                    exercise.title.isNotEmpty
+                        ? exercise.title
+                        : exercise.type.displayName,
                     style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87),
                   ),
                   const SizedBox(height: 4),
-
-                  // Distance and duration
                   Text(
                     '${exercise.formattedDistance} in ${exercise.formattedDuration}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 8),
-
-                  // Date and steps
                   Row(
                     children: [
-                      Text(
-                        exercise.formattedDate,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[500],
-                        ),
-                      ),
+                      Text(exercise.formattedDate,
+                          style: TextStyle(fontSize: 12, color: Colors.grey[500])),
                       const Spacer(),
                       if (exercise.steps != null)
-                        Text(
-                          exercise.formattedSteps,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[500],
-                          ),
-                        ),
+                        Text(exercise.formattedSteps,
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey[500])),
                     ],
                   ),
                 ],
               ),
             ),
-
-
-            // Color indicator
             Container(
               width: 50,
               height: 50,
@@ -360,29 +559,17 @@ class ExerciseListView extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.fitness_center,
-              size: 80,
-              color: Colors.grey[300],
-            ),
+            Icon(Icons.fitness_center, size: 80, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            Text(
-              'No exercises yet',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey[500],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            Text('No exercises yet',
+                style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.grey[500],
+                    fontWeight: FontWeight.w500)),
             const SizedBox(height: 8),
-            Text(
-              'Tap the + button to add your first exercise',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[400],
-              ),
-              textAlign: TextAlign.center,
-            ),
+            Text('Tap the + button to add your first exercise',
+                style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -395,10 +582,9 @@ class ExerciseListView extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
-          ),
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5))
         ],
       ),
       child: SafeArea(
@@ -425,24 +611,26 @@ class ExerciseListView extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: isActive ? const Color(0xFFE8E3FF) : Colors.transparent,
+            color: isActive
+                ? const Color(0xFFE8E3FF)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
           ),
-          child: Icon(
-            icon,
-            color: isActive ? const Color(0xFF7C6FDC) : Colors.grey[600],
-            size: 26,
-          ),
+          child: Icon(icon,
+              color: isActive
+                  ? const Color(0xFF7C6FDC)
+                  : Colors.grey[600],
+              size: 26),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: isActive ? const Color(0xFF7C6FDC) : Colors.grey[600],
-            fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
-          ),
-        ),
+        Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                color: isActive
+                    ? const Color(0xFF7C6FDC)
+                    : Colors.grey[600],
+                fontWeight:
+                isActive ? FontWeight.w500 : FontWeight.w400)),
       ],
     );
   }
