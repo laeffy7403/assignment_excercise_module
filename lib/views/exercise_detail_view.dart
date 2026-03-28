@@ -74,135 +74,323 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            // Map View (Static - Past Route Only, Battery Efficient)
-
-            GestureDetector(
-              onTap: hasRoute ? () {
-                setState(() {
-                  _isMapExpanded = !_isMapExpanded;
-                });
-              } : null,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                height: _isMapExpanded ? MediaQuery.of(context).size.height * 0.6 : 300,
-                child: Stack(
-                  children: [
-                    hasRoute
-                        ? FlutterMap(
-                      mapController: _mapController,
-                      options: MapOptions(
-                        initialCenter: routePoints.first,
-                        initialZoom: 14.0,
-                        minZoom: 3.0,
-                        maxZoom: 19.0,
-                        initialCameraFit: _getRouteBounds() != null
-                            ? CameraFit.bounds(
-                          bounds: _getRouteBounds()!,
-                          padding: const EdgeInsets.all(50),
-                        )
-                            : null,
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'com.example.assignment_excercise_module',
-                          maxZoom: 19,
-                        ),
-                        if (routePoints.length >= 2)
-                          PolylineLayer(
-                            polylines: [
-                              Polyline(
-                                points: routePoints,
-                                color: const Color(0xFF2196F3),
-                                strokeWidth: 5.0,
-                                borderColor: Colors.white,
-                                borderStrokeWidth: 2.0,
+            Column(
+              children: [
+                // Map View — only shown for live-tracked sessions that have route data
+                if (hasRoute)
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _isMapExpanded = !_isMapExpanded;
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      height: _isMapExpanded ? MediaQuery.of(context).size.height * 0.6 : 300,
+                      child: Stack(
+                        children: [
+                          FlutterMap(
+                            mapController: _mapController,
+                            options: MapOptions(
+                              initialCenter: routePoints.first,
+                              initialZoom: 14.0,
+                              minZoom: 3.0,
+                              maxZoom: 19.0,
+                              initialCameraFit: _getRouteBounds() != null
+                                  ? CameraFit.bounds(
+                                bounds: _getRouteBounds()!,
+                                padding: const EdgeInsets.all(50),
+                              )
+                                  : null,
+                            ),
+                            children: [
+                              TileLayer(
+                                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                userAgentPackageName: 'com.example.assignment_excercise_module',
+                                maxZoom: 19,
+                              ),
+                              if (routePoints.length >= 2)
+                                PolylineLayer(
+                                  polylines: [
+                                    Polyline(
+                                      points: routePoints,
+                                      color: const Color(0xFF2196F3),
+                                      strokeWidth: 5.0,
+                                      borderColor: Colors.white,
+                                      borderStrokeWidth: 2.0,
+                                    ),
+                                  ],
+                                ),
+                              MarkerLayer(
+                                markers: [
+                                  Marker(
+                                    point: routePoints.first,
+                                    width: 40,
+                                    height: 40,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.green,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 3),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.3),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(Icons.flag, color: Colors.white, size: 20),
+                                    ),
+                                  ),
+                                  Marker(
+                                    point: routePoints.last,
+                                    width: 40,
+                                    height: 40,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 3),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.3),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(Icons.location_on, color: Colors.white, size: 20),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              RichAttributionWidget(
+                                attributions: [
+                                  TextSourceAttribution('© OpenStreetMap', onTap: () {}),
+                                ],
                               ),
                             ],
                           ),
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: routePoints.first,
-                              width: 40,
-                              height: 40,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.green,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 3),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.3),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(Icons.flag, color: Colors.white, size: 20),
-                              ),
+
+                          // Back button
+                          Positioned(
+                            top: 16,
+                            left: 16,
+                            child: _buildMapButton(
+                              icon: Icons.arrow_back,
+                              onTap: () => Navigator.pop(context),
                             ),
-                            Marker(
-                              point: routePoints.last,
-                              width: 40,
-                              height: 40,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 3),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.3),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(Icons.location_on, color: Colors.white, size: 20),
-                              ),
+                          ),
+
+                          // Edit button
+                          Positioned(
+                            top: 16,
+                            right: 16,
+                            child: _buildMapButton(
+                              icon: Icons.edit,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        AddExerciseView(exercise: widget.exercise),
+                                  ),
+                                );
+                              },
                             ),
-                          ],
-                        ),
-                        RichAttributionWidget(
-                          attributions: [
-                            TextSourceAttribution('© OpenStreetMap', onTap: () {}),
-                          ],
-                        ),
-                      ],
-                    )
-                        : Container(
-                      color: Colors.grey[900],
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.map_outlined, size: 48, color: Colors.grey[700]),
-                            const SizedBox(height: 8),
-                            Text('No route data', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                          ],
-                        ),
+                          ),
+
+                          // Delete button
+                          Positioned(
+                            top: 16,
+                            right: 68,
+                            child: _buildMapButton(
+                              icon: Icons.delete_outline,
+                              iconColor: Colors.red,
+                              onTap: () => _confirmDelete(context),
+                            ),
+                          ),
+
+                          // Expand/collapse button
+                          Positioned(
+                            bottom: 16,
+                            right: 16,
+                            child: _buildMapButton(
+                              icon: _isMapExpanded ? Icons.fullscreen_exit : Icons.fullscreen,
+                              onTap: () {
+                                setState(() {
+                                  _isMapExpanded = !_isMapExpanded;
+                                });
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                  ),
 
+                // Details Panel
+                Expanded(
+                  child: Container(
+                    color: Colors.white,
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.fromLTRB(20, hasRoute ? 20 : 72, 20, 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Title
+                          Text(
+                            widget.exercise.title,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${widget.exercise.formattedDate}  ·  ${widget.exercise.formattedTime} – ${_getEndTime()}',
+                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 20),
 
-                    // Back button
-                    Positioned(
-                      top: 16,
-                      left: 16,
-                      child: _buildMapButton(
+                          // Step Goal Progress (if available)
+                          if (widget.exercise.steps != null && widget.exercise.stepGoal != null) ...[
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey[200]!),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        widget.exercise.steps! >= widget.exercise.stepGoal!
+                                            ? Icons.check_circle
+                                            : Icons.flag,
+                                        color: widget.exercise.steps! >= widget.exercise.stepGoal!
+                                            ? Colors.green
+                                            : Colors.orange,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        widget.exercise.steps! >= widget.exercise.stepGoal!
+                                            ? '🎉 Step Goal Achieved!'
+                                            : 'Step Goal Progress',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: widget.exercise.steps! >= widget.exercise.stepGoal!
+                                              ? Colors.green[700]
+                                              : Colors.orange[700],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  LinearProgressIndicator(
+                                    value: (widget.exercise.steps! / widget.exercise.stepGoal!)
+                                        .clamp(0.0, 1.0),
+                                    backgroundColor: Colors.grey[300],
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      widget.exercise.steps! >= widget.exercise.stepGoal!
+                                          ? Colors.green
+                                          : Colors.orange,
+                                    ),
+                                    minHeight: 8,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '${widget.exercise.steps} / ${widget.exercise.stepGoal} steps',
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          _buildDetailRow('Exercise', widget.exercise.type.displayName),
+                          const Divider(height: 1),
+
+                          // BUG FIX #1: Use _formatDistance() which keeps enough
+                          // decimal places for short sessions (0.030 km, not 0.0 km).
+                          // Also show the row even when distanceKm == 0.0 so the user
+                          // can see it was tracked (just very short).
+                          if (hasDistance) ...[
+                            _buildDetailRow('Distance', _formatDistance(widget.exercise.distanceKm!)),
+                            const Divider(height: 1),
+                          ],
+
+                          if (widget.exercise.steps != null) ...[
+                            _buildDetailRow('Steps', '${widget.exercise.steps} steps'),
+                            const Divider(height: 1),
+                          ],
+
+                          if (widget.exercise.energyExpended != null) ...[
+                            _buildDetailRow('Energy expended', '${widget.exercise.energyExpended} cal'),
+                            const Divider(height: 1),
+                          ],
+
+                          _buildDetailRow(
+                            'Start',
+                            '${widget.exercise.formattedDate}   ${widget.exercise.formattedTime}',
+                          ),
+                          const Divider(height: 1),
+
+                          _buildDetailRow('Duration', '${widget.exercise.durationMinutes} min'),
+                          const Divider(height: 1),
+
+                          const SizedBox(height: 16),
+
+                          if (widget.exercise.notes != null && widget.exercise.notes!.isNotEmpty) ...[
+                            const Text(
+                              'Note',
+                              style: TextStyle(fontSize: 13, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              widget.exercise.notes!,
+                              style: const TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ), // end Column
+
+            // Nav overlay for manual entries (no map) — back / delete / edit
+            if (!hasRoute)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      _buildMapButton(
                         icon: Icons.arrow_back,
                         onTap: () => Navigator.pop(context),
                       ),
-                    ),
-
-                    // Edit button
-                    Positioned(
-                      top: 16,
-                      right: 16,
-                      child: _buildMapButton(
+                      const Spacer(),
+                      _buildMapButton(
+                        icon: Icons.delete_outline,
+                        iconColor: Colors.red,
+                        onTap: () => _confirmDelete(context),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildMapButton(
                         icon: Icons.edit,
                         onTap: () {
                           Navigator.push(
@@ -214,173 +402,12 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                           );
                         },
                       ),
-                    ),
-
-                    // Delete button
-                    Positioned(
-                      top: 16,
-                      right: 68,
-                      child: _buildMapButton(
-                        icon: Icons.delete_outline,
-                        iconColor: Colors.red,
-                        onTap: () => _confirmDelete(context),
-                      ),
-                    ),
-
-                    if (hasRoute)
-                      Positioned(
-                        bottom: 16,
-                        right: 16,
-                        child: _buildMapButton(
-                          icon: _isMapExpanded ? Icons.fullscreen_exit : Icons.fullscreen,
-                          onTap: () {
-                            setState(() {
-                              _isMapExpanded = !_isMapExpanded;
-                            });
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Details Panel
-            Expanded(
-              child: Container(
-                color: Colors.white,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title
-                      Text(
-                        widget.exercise.title,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${widget.exercise.formattedDate}  ·  ${widget.exercise.formattedTime} – ${_getEndTime()}',
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Step Goal Progress (if available)
-                      if (widget.exercise.steps != null && widget.exercise.stepGoal != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey[200]!),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    widget.exercise.steps! >= widget.exercise.stepGoal!
-                                        ? Icons.check_circle
-                                        : Icons.flag,
-                                    color: widget.exercise.steps! >= widget.exercise.stepGoal!
-                                        ? Colors.green
-                                        : Colors.orange,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    widget.exercise.steps! >= widget.exercise.stepGoal!
-                                        ? '🎉 Step Goal Achieved!'
-                                        : 'Step Goal Progress',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: widget.exercise.steps! >= widget.exercise.stepGoal!
-                                          ? Colors.green[700]
-                                          : Colors.orange[700],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              LinearProgressIndicator(
-                                value: (widget.exercise.steps! / widget.exercise.stepGoal!)
-                                    .clamp(0.0, 1.0),
-                                backgroundColor: Colors.grey[300],
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  widget.exercise.steps! >= widget.exercise.stepGoal!
-                                      ? Colors.green
-                                      : Colors.orange,
-                                ),
-                                minHeight: 8,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '${widget.exercise.steps} / ${widget.exercise.stepGoal} steps',
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-
-                      _buildDetailRow('Exercise', widget.exercise.type.displayName),
-                      const Divider(height: 1),
-
-                      // BUG FIX #1: Use _formatDistance() which keeps enough
-                      // decimal places for short sessions (0.030 km, not 0.0 km).
-                      // Also show the row even when distanceKm == 0.0 so the user
-                      // can see it was tracked (just very short).
-                      if (hasDistance) ...[
-                        _buildDetailRow('Distance', _formatDistance(widget.exercise.distanceKm!)),
-                        const Divider(height: 1),
-                      ],
-
-                      if (widget.exercise.steps != null) ...[
-                        _buildDetailRow('Steps', '${widget.exercise.steps} steps'),
-                        const Divider(height: 1),
-                      ],
-
-                      if (widget.exercise.energyExpended != null) ...[
-                        _buildDetailRow('Energy expended', '${widget.exercise.energyExpended} cal'),
-                        const Divider(height: 1),
-                      ],
-
-                      _buildDetailRow(
-                        'Start',
-                        '${widget.exercise.formattedDate}   ${widget.exercise.formattedTime}',
-                      ),
-                      const Divider(height: 1),
-
-                      _buildDetailRow('Duration', '${widget.exercise.durationMinutes} min'),
-                      const Divider(height: 1),
-
-                      const SizedBox(height: 16),
-
-                      if (widget.exercise.notes != null && widget.exercise.notes!.isNotEmpty) ...[
-                        const Text(
-                          'Note',
-                          style: TextStyle(fontSize: 13, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          widget.exercise.notes!,
-                          style: const TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
-                        ),
-                      ],
                     ],
                   ),
                 ),
               ),
-            ),
           ],
-        ),
+        ), // end Stack
       ),
     );
   }

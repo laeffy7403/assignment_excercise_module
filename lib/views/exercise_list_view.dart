@@ -545,6 +545,11 @@ class _ExerciseListViewState extends State<ExerciseListView> {
                 color: exercise.type.color.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
+              child: Icon(
+                exercise.type.icon,
+                color: exercise.type.color.withOpacity(0.9),
+                size: 26,
+              ),
             ),
           ],
         ),
