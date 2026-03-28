@@ -4,13 +4,25 @@ A new Flutter project.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+flutter clean
 
-A few resources to get you started if this is your first Flutter project:
+flutter pub get
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+adb kill-server
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+adb start-server
+
+check available device
+'adb devices'
+
+set tcp
+'adb tcpip 5555'
+
+
+establish connection
+-adb connect <ur devices ip>:5555'
+
+
+
+kill connection
+-adb disconnect
