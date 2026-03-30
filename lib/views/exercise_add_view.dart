@@ -149,6 +149,9 @@ class _AddExerciseViewState extends State<AddExerciseView> {
       energyExpended: calories,
       steps: steps,
       notes: _notesController.text.isEmpty ? null : _notesController.text,
+      // FIX: preserve routePoints from original when editing so the GPS route
+      // is never lost if this view is ever opened for a live-tracked session.
+      routePoints: _isEditing ? widget.exercise!.routePoints : null,
       stepGoal: stepGoal,
       distanceGoal: distanceGoal,
       timeGoal: timeGoal,

@@ -19,6 +19,17 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
   final MapController _mapController = MapController();
   bool _isMapExpanded = false;
 
+  // FIX: track mutable title/notes locally so UI refreshes after editing
+  late String _title;
+  late String? _notes;
+
+  @override
+  void initState() {
+    super.initState();
+    _title = widget.exercise.title;
+    _notes = widget.exercise.notes;
+  }
+
   List<LatLng> _getRouteLatLngs() {
     if (widget.exercise.routePoints == null || widget.exercise.routePoints!.isEmpty) {
       return [];
@@ -50,12 +61,8 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
     );
   }
 
-  // BUG FIX #1: Use toStringAsFixed(2) so small distances like 0.03 km
-  // are not rounded to "0.0". Also treat distanceKm == 0.0 as a valid
-  // value to display (it was saved intentionally by the live session).
   String _formatDistance(double km) {
     if (km < 0.1) {
-      // Show 3 decimal places for very short sessions (e.g. 0.030 km)
       return '${km.toStringAsFixed(3)} km';
     }
     return '${km.toStringAsFixed(2)} km';
@@ -66,9 +73,6 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
     final hasRoute = widget.exercise.routePoints != null &&
         widget.exercise.routePoints!.isNotEmpty;
     final routePoints = _getRouteLatLngs();
-
-    // BUG FIX #1: Show distance whenever it was recorded by the live session
-    // (distanceKm != null). Previously toStringAsFixed(1) hid small values.
     final hasDistance = widget.exercise.distanceKm != null;
 
     return Scaffold(
@@ -185,21 +189,14 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                             ),
                           ),
 
-                          // Edit button
+                          // FIX: GPS edit button → title/notes-only dialog
+                          // (does NOT open AddExerciseView, so routePoints are never lost)
                           Positioned(
                             top: 16,
                             right: 16,
                             child: _buildMapButton(
                               icon: Icons.edit,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        AddExerciseView(exercise: widget.exercise),
-                                  ),
-                                );
-                              },
+                              onTap: () => _showLiveEditDialog(context),
                             ),
                           ),
 
@@ -241,9 +238,10 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Title
+                          // FIX: display _title (local state) so it refreshes
+                          // after editing without needing a full Navigator rebuild
                           Text(
-                            widget.exercise.title,
+                            _title,
                             style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w600,
@@ -320,10 +318,6 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                           _buildDetailRow('Exercise', widget.exercise.type.displayName),
                           const Divider(height: 1),
 
-                          // BUG FIX #1: Use _formatDistance() which keeps enough
-                          // decimal places for short sessions (0.030 km, not 0.0 km).
-                          // Also show the row even when distanceKm == 0.0 so the user
-                          // can see it was tracked (just very short).
                           if (hasDistance) ...[
                             _buildDetailRow('Distance', _formatDistance(widget.exercise.distanceKm!)),
                             const Divider(height: 1),
@@ -350,14 +344,15 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
 
                           const SizedBox(height: 16),
 
-                          if (widget.exercise.notes != null && widget.exercise.notes!.isNotEmpty) ...[
+                          // FIX: display _notes (local state) so it refreshes after editing
+                          if (_notes != null && _notes!.isNotEmpty) ...[
                             const Text(
                               'Note',
                               style: TextStyle(fontSize: 13, color: Colors.grey),
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              widget.exercise.notes!,
+                              _notes!,
                               style: const TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
                             ),
                           ],
@@ -453,6 +448,86 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
     final period = hour >= 12 ? 'pm' : 'am';
     final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
     return '$displayHour:$minute $period';
+  }
+
+  // FIX: GPS entries only allow editing title + notes.
+  // All sensor data (distance, steps, calories, duration, type, routePoints)
+  // are preserved exactly via copyWith — they are never shown as editable fields.
+  void _showLiveEditDialog(BuildContext context) {
+    final titleController = TextEditingController(text: _title);
+    final notesController = TextEditingController(text: _notes ?? '');
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit Workout'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: notesController,
+              textCapitalization: TextCapitalization.sentences,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Notes',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newTitle = titleController.text.trim().isEmpty
+                  ? _title
+                  : titleController.text.trim();
+              final newNotes = notesController.text.trim().isEmpty
+                  ? null
+                  : notesController.text.trim();
+
+              // copyWith preserves routePoints, distanceKm, steps, energyExpended,
+              // durationMinutes, type, startTime — nothing sensor-related is touched.
+              final updated = widget.exercise.copyWith(
+                title: newTitle,
+                notes: newNotes,
+              );
+
+              final controller =
+              Provider.of<ExerciseController>(context, listen: false);
+              await controller.updateExercise(updated);
+
+              Navigator.pop(dialogContext);
+
+              // Refresh local display state without Navigator rebuild
+              if (mounted) {
+                setState(() {
+                  _title = newTitle;
+                  _notes = newNotes;
+                });
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7C6FDC),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _confirmDelete(BuildContext context) {

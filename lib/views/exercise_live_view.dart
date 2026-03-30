@@ -332,7 +332,10 @@ class _LiveExerciseViewState extends State<LiveExerciseView>
       type: widget.exerciseType,
       startTime: _startTime!,
       durationMinutes: (_elapsedSeconds / 60).round().clamp(1, 9999),
-      distanceKm: locationController.totalDistance,
+      // FIX: round to 2 decimal places so detail page shows e.g. "0.33 km"
+      // instead of the raw floating-point accumulation "0.326826... km".
+      distanceKm: double.parse(
+          locationController.totalDistance.toStringAsFixed(2)),
       steps: pedometerController.sessionSteps,
       routePoints: locationController.routePoints.toList(),
       stepGoal: _loadedStepGoal,

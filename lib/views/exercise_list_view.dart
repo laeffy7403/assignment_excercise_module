@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import '../controllers/exercise_controller.dart';
 import '../controllers/pedometer_controller.dart';
 import '../models/exercise.dart';
@@ -16,19 +17,33 @@ class ExerciseListView extends StatefulWidget {
 }
 
 class _ExerciseListViewState extends State<ExerciseListView> {
+  // FIX (banner freeze): tick every 30 s so the displayed duration stays fresh.
+  Timer? _bannerRefreshTimer;
+
   @override
   void initState() {
     super.initState();
-    // NEW FEATURE: kick off background cadence monitor as soon as the list
-    // view is shown, so walks are detected even before a manual session.
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final pedometer =
       Provider.of<PedometerController>(context, listen: false);
       pedometer.startAutoDetect();
     });
+
+    // Redraw every 30 seconds so "X min" in the banner stays current
+    _bannerRefreshTimer =
+        Timer.periodic(const Duration(seconds: 30), (_) {
+          if (mounted) setState(() {});
+        });
   }
 
-  // NEW FEATURE: save the auto-detected walk as an Exercise record
+  @override
+  void dispose() {
+    _bannerRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  // ── Save the auto-detected walk ─────────────────────────────────────────────
   Future<void> _saveAutoDetectedWalk(BuildContext context) async {
     final pedometer =
     Provider.of<PedometerController>(context, listen: false);
@@ -40,15 +55,13 @@ class _ExerciseListViewState extends State<ExerciseListView> {
     DateTime.now().difference(startTime).inMinutes.clamp(1, 9999);
     final steps = pedometer.autoDetectedSteps;
 
-    // Ask for a title before saving
     String title = '';
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
         final titleController = TextEditingController(
-          text:
-          'Walk ${TimeOfDay.fromDateTime(startTime).format(context)}',
+          text: 'Walk ${TimeOfDay.fromDateTime(startTime).format(context)}',
         );
         return AlertDialog(
           title: const Text('Save detected walk'),
@@ -58,7 +71,8 @@ class _ExerciseListViewState extends State<ExerciseListView> {
             textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(
               hintText: 'e.g. Afternoon Walk',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              border:
+              OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             ),
           ),
           actions: [
@@ -108,6 +122,8 @@ class _ExerciseListViewState extends State<ExerciseListView> {
     }
   }
 
+  // ── Build ───────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -144,7 +160,7 @@ class _ExerciseListViewState extends State<ExerciseListView> {
                     return ListView(
                       padding: const EdgeInsets.all(20),
                       children: [
-                        // ── NEW FEATURE: Auto-walk detection banner ──────────
+                        // ── Auto-walk banner ───────────────────────────────
                         if (pedometer.isAutoWalkDetected)
                           _buildAutoWalkBanner(context, pedometer),
 
@@ -156,9 +172,8 @@ class _ExerciseListViewState extends State<ExerciseListView> {
                         if (controller.todayExercises.isNotEmpty) ...[
                           _buildSectionHeader("Today's Log"),
                           const SizedBox(height: 16),
-                          ...controller.todayExercises.map(
-                                (e) => _buildExerciseCard(context, e),
-                          ),
+                          ...controller.todayExercises
+                              .map((e) => _buildExerciseCard(context, e)),
                           const SizedBox(height: 24),
                         ],
 
@@ -166,9 +181,8 @@ class _ExerciseListViewState extends State<ExerciseListView> {
                         if (controller.pastExercises.isNotEmpty) ...[
                           _buildSectionHeader('Past exercise Log'),
                           const SizedBox(height: 16),
-                          ...controller.pastExercises.map(
-                                (e) => _buildExerciseCard(context, e),
-                          ),
+                          ...controller.pastExercises
+                              .map((e) => _buildExerciseCard(context, e)),
                         ],
 
                         if (controller.exercises.isEmpty)
@@ -200,10 +214,13 @@ class _ExerciseListViewState extends State<ExerciseListView> {
     );
   }
 
-  // ── NEW FEATURE: Auto-walk banner ────────────────────────────────────────────
+  // ── Auto-walk banner ────────────────────────────────────────────────────────
   Widget _buildAutoWalkBanner(
       BuildContext context, PedometerController pedometer) {
     final startTime = pedometer.autoDetectStartTime;
+
+    // FIX (banner freeze): compute elapsed fresh every build; _bannerRefreshTimer
+    // calls setState every 30 s so this value actually updates.
     final elapsed = startTime != null
         ? DateTime.now().difference(startTime)
         : Duration.zero;
@@ -240,8 +257,8 @@ class _ExerciseListViewState extends State<ExerciseListView> {
                   color: Colors.white.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
-                child:
-                const Icon(Icons.directions_walk, color: Colors.white, size: 22),
+                child: const Icon(Icons.directions_walk,
+                    color: Colors.white, size: 22),
               ),
               const SizedBox(width: 10),
               const Expanded(
@@ -253,12 +270,12 @@ class _ExerciseListViewState extends State<ExerciseListView> {
                       fontWeight: FontWeight.w700),
                 ),
               ),
-              // Dismiss X
               GestureDetector(
                 onTap: () =>
                     Provider.of<PedometerController>(context, listen: false)
                         .dismissAutoDetect(),
-                child: const Icon(Icons.close, color: Colors.white70, size: 20),
+                child:
+                const Icon(Icons.close, color: Colors.white70, size: 20),
               ),
             ],
           ),
@@ -269,17 +286,10 @@ class _ExerciseListViewState extends State<ExerciseListView> {
           Row(
             children: [
               _buildBannerStat(
-                Icons.access_time,
-                '$minutes min',
-                'Duration',
-              ),
+                  Icons.access_time, '$minutes min', 'Duration'),
               const SizedBox(width: 12),
               if (steps > 0)
-                _buildBannerStat(
-                  Icons.directions_walk,
-                  '$steps',
-                  'Steps',
-                ),
+                _buildBannerStat(Icons.directions_walk, '$steps', 'Steps'),
             ],
           ),
 
@@ -373,13 +383,15 @@ class _ExerciseListViewState extends State<ExerciseListView> {
     );
   }
 
-  // ── Existing widgets (unchanged) ────────────────────────────────────────────
+  // ── Existing widgets ────────────────────────────────────────────────────────
 
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
       style: TextStyle(
-          fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.w400),
+          fontSize: 16,
+          color: Colors.grey[600],
+          fontWeight: FontWeight.w400),
     );
   }
 
@@ -406,7 +418,8 @@ class _ExerciseListViewState extends State<ExerciseListView> {
         children: [
           Row(
             children: [
-              const Icon(Icons.play_circle_filled, color: Colors.white, size: 32),
+              const Icon(Icons.play_circle_filled,
+                  color: Colors.white, size: 32),
               const SizedBox(width: 12),
               const Text(
                 'Start a Workout',
@@ -434,14 +447,14 @@ class _ExerciseListViewState extends State<ExerciseListView> {
           const SizedBox(height: 16),
           Row(
             children: [
-              _buildQuickStartButton(
-                  context, ExerciseType.walking, 'Walking', Icons.directions_walk),
+              _buildQuickStartButton(context, ExerciseType.walking, 'Walking',
+                  Icons.directions_walk),
               const SizedBox(width: 12),
-              _buildQuickStartButton(
-                  context, ExerciseType.jogging, 'Jogging', Icons.run_circle),
+              _buildQuickStartButton(context, ExerciseType.jogging, 'Jogging',
+                  Icons.run_circle),
               const SizedBox(width: 12),
-              _buildQuickStartButton(
-                  context, ExerciseType.running, 'Running', Icons.directions_run),
+              _buildQuickStartButton(context, ExerciseType.running, 'Running',
+                  Icons.directions_run),
             ],
           ),
         ],
@@ -454,7 +467,6 @@ class _ExerciseListViewState extends State<ExerciseListView> {
     return Expanded(
       child: GestureDetector(
         onTap: () {
-          // Reset auto-detect when user starts a manual session
           Provider.of<PedometerController>(context, listen: false)
               .resetAutoDetect();
           Navigator.push(
@@ -468,7 +480,8 @@ class _ExerciseListViewState extends State<ExerciseListView> {
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.2),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+            border:
+            Border.all(color: Colors.white.withOpacity(0.3), width: 1),
           ),
           child: Column(
             children: [
@@ -497,7 +510,8 @@ class _ExerciseListViewState extends State<ExerciseListView> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-            color: Colors.grey[50], borderRadius: BorderRadius.circular(16)),
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(16)),
         child: Row(
           children: [
             Expanded(
@@ -506,7 +520,8 @@ class _ExerciseListViewState extends State<ExerciseListView> {
                 children: [
                   Text(
                     'exercise created at ${exercise.formattedTime}',
-                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    style:
+                    TextStyle(fontSize: 11, color: Colors.grey[500]),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -521,13 +536,15 @@ class _ExerciseListViewState extends State<ExerciseListView> {
                   const SizedBox(height: 4),
                   Text(
                     '${exercise.formattedDistance} in ${exercise.formattedDuration}',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    style:
+                    TextStyle(fontSize: 13, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Text(exercise.formattedDate,
-                          style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey[500])),
                       const Spacer(),
                       if (exercise.steps != null)
                         Text(exercise.formattedSteps,
@@ -622,9 +639,8 @@ class _ExerciseListViewState extends State<ExerciseListView> {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Icon(icon,
-              color: isActive
-                  ? const Color(0xFF7C6FDC)
-                  : Colors.grey[600],
+              color:
+              isActive ? const Color(0xFF7C6FDC) : Colors.grey[600],
               size: 26),
         ),
         const SizedBox(height: 4),
