@@ -9,7 +9,8 @@ import 'exercise_add_view.dart';
 class ExerciseDetailView extends StatefulWidget {
   final Exercise exercise;
 
-  const ExerciseDetailView({Key? key, required this.exercise}) : super(key: key);
+  const ExerciseDetailView({Key? key, required this.exercise})
+      : super(key: key);
 
   @override
   State<ExerciseDetailView> createState() => _ExerciseDetailViewState();
@@ -19,7 +20,6 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
   final MapController _mapController = MapController();
   bool _isMapExpanded = false;
 
-  // FIX: track mutable title/notes locally so UI refreshes after editing
   late String _title;
   late String? _notes;
 
@@ -30,8 +30,11 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
     _notes = widget.exercise.notes;
   }
 
+  // ── Route helpers ───────────────────────────────────────────────────────────
+
   List<LatLng> _getRouteLatLngs() {
-    if (widget.exercise.routePoints == null || widget.exercise.routePoints!.isEmpty) {
+    if (widget.exercise.routePoints == null ||
+        widget.exercise.routePoints!.isEmpty) {
       return [];
     }
     return widget.exercise.routePoints!
@@ -62,11 +65,21 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
   }
 
   String _formatDistance(double km) {
-    if (km < 0.1) {
-      return '${km.toStringAsFixed(3)} km';
-    }
+    if (km < 0.1) return '${km.toStringAsFixed(3)} km';
     return '${km.toStringAsFixed(2)} km';
   }
+
+  String _getEndTime() {
+    final endTime = widget.exercise.startTime
+        .add(Duration(minutes: widget.exercise.durationMinutes));
+    final hour = endTime.hour;
+    final minute = endTime.minute.toString().padLeft(2, '0');
+    final period = hour >= 12 ? 'pm' : 'am';
+    final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+    return '$displayHour:$minute $period';
+  }
+
+  // ── Build ───────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +87,7 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
         widget.exercise.routePoints!.isNotEmpty;
     final routePoints = _getRouteLatLngs();
     final hasDistance = widget.exercise.distanceKm != null;
+    final isLocked = widget.exercise.isAutoDetected;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -82,17 +96,17 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
           children: [
             Column(
               children: [
-                // Map View — only shown for live-tracked sessions that have route data
+                // ── Map ─────────────────────────────────────────────────────
                 if (hasRoute)
                   GestureDetector(
                     onTap: () {
-                      setState(() {
-                        _isMapExpanded = !_isMapExpanded;
-                      });
+                      setState(() => _isMapExpanded = !_isMapExpanded);
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
-                      height: _isMapExpanded ? MediaQuery.of(context).size.height * 0.6 : 300,
+                      height: _isMapExpanded
+                          ? MediaQuery.of(context).size.height * 0.6
+                          : 300,
                       child: Stack(
                         children: [
                           FlutterMap(
@@ -111,8 +125,10 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                             ),
                             children: [
                               TileLayer(
-                                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                userAgentPackageName: 'com.example.assignment_excercise_module',
+                                urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                userAgentPackageName:
+                                'com.example.assignment_excercise_module',
                                 maxZoom: 19,
                               ),
                               if (routePoints.length >= 2)
@@ -133,53 +149,27 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                                     point: routePoints.first,
                                     width: 40,
                                     height: 40,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.green,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 3),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.3),
-                                            blurRadius: 6,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Icon(Icons.flag, color: Colors.white, size: 20),
-                                    ),
+                                    child: _buildMarker(
+                                        Icons.flag, Colors.green),
                                   ),
                                   Marker(
                                     point: routePoints.last,
                                     width: 40,
                                     height: 40,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.red,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 3),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.3),
-                                            blurRadius: 6,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Icon(Icons.location_on, color: Colors.white, size: 20),
-                                    ),
+                                    child: _buildMarker(
+                                        Icons.location_on, Colors.red),
                                   ),
                                 ],
                               ),
                               RichAttributionWidget(
                                 attributions: [
-                                  TextSourceAttribution('© OpenStreetMap', onTap: () {}),
+                                  TextSourceAttribution(
+                                      '© OpenStreetMap',
+                                      onTap: () {}),
                                 ],
                               ),
                             ],
                           ),
-
-                          // Back button
                           Positioned(
                             top: 16,
                             left: 16,
@@ -188,19 +178,19 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                               onTap: () => Navigator.pop(context),
                             ),
                           ),
-
-                          // FIX: GPS edit button → title/notes-only dialog
-                          // (does NOT open AddExerciseView, so routePoints are never lost)
                           Positioned(
                             top: 16,
                             right: 16,
                             child: _buildMapButton(
-                              icon: Icons.edit,
-                              onTap: () => _showLiveEditDialog(context),
+                              icon: isLocked ? Icons.lock_outline : Icons.edit,
+                              iconColor: isLocked
+                                  ? Colors.grey[600]!
+                                  : Colors.black87,
+                              onTap: isLocked
+                                  ? () => _showLockedSnackbar(context)
+                                  : () => _showLiveEditDialog(context),
                             ),
                           ),
-
-                          // Delete button
                           Positioned(
                             top: 16,
                             right: 68,
@@ -210,17 +200,16 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                               onTap: () => _confirmDelete(context),
                             ),
                           ),
-
-                          // Expand/collapse button
                           Positioned(
                             bottom: 16,
                             right: 16,
                             child: _buildMapButton(
-                              icon: _isMapExpanded ? Icons.fullscreen_exit : Icons.fullscreen,
+                              icon: _isMapExpanded
+                                  ? Icons.fullscreen_exit
+                                  : Icons.fullscreen,
                               onTap: () {
-                                setState(() {
-                                  _isMapExpanded = !_isMapExpanded;
-                                });
+                                setState(() =>
+                                _isMapExpanded = !_isMapExpanded);
                               },
                             ),
                           ),
@@ -229,107 +218,126 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                     ),
                   ),
 
-                // Details Panel
+                // ── Details panel ────────────────────────────────────────────
                 Expanded(
                   child: Container(
                     color: Colors.white,
                     child: SingleChildScrollView(
-                      padding: EdgeInsets.fromLTRB(20, hasRoute ? 20 : 72, 20, 20),
+                      padding: EdgeInsets.fromLTRB(
+                          20, hasRoute ? 20 : 72, 20, 20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // FIX: display _title (local state) so it refreshes
-                          // after editing without needing a full Navigator rebuild
-                          Text(
-                            _title,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
+                          // Title + lock badge
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _title,
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                              if (isLocked)
+                                Container(
+                                  margin: const EdgeInsets.only(
+                                      left: 8, top: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                        color: Colors.grey[300]!),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.lock_outline,
+                                          size: 13,
+                                          color: Colors.grey[500]),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Auto-detected',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey[500]),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 4),
                           Text(
                             '${widget.exercise.formattedDate}  ·  ${widget.exercise.formattedTime} – ${_getEndTime()}',
-                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            style: TextStyle(
+                                fontSize: 13, color: Colors.grey[600]),
                           ),
-                          const SizedBox(height: 20),
 
-                          // Step Goal Progress (if available)
-                          if (widget.exercise.steps != null && widget.exercise.stepGoal != null) ...[
+                          // Read-only notice
+                          if (isLocked) ...[
+                            const SizedBox(height: 12),
                             Container(
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.grey[50],
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey[200]!),
+                                color: const Color(0xFFFFF9E6),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                    color: const Color(0xFFFFE082)),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              child: Row(
                                 children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        widget.exercise.steps! >= widget.exercise.stepGoal!
-                                            ? Icons.check_circle
-                                            : Icons.flag,
-                                        color: widget.exercise.steps! >= widget.exercise.stepGoal!
-                                            ? Colors.green
-                                            : Colors.orange,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        widget.exercise.steps! >= widget.exercise.stepGoal!
-                                            ? '🎉 Step Goal Achieved!'
-                                            : 'Step Goal Progress',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: widget.exercise.steps! >= widget.exercise.stepGoal!
-                                              ? Colors.green[700]
-                                              : Colors.orange[700],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  LinearProgressIndicator(
-                                    value: (widget.exercise.steps! / widget.exercise.stepGoal!)
-                                        .clamp(0.0, 1.0),
-                                    backgroundColor: Colors.grey[300],
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      widget.exercise.steps! >= widget.exercise.stepGoal!
-                                          ? Colors.green
-                                          : Colors.orange,
+                                  const Icon(Icons.info_outline,
+                                      size: 16,
+                                      color: Color(0xFFF57F17)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Steps, distance, and duration were recorded automatically and cannot be edited.',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.brown[700]),
                                     ),
-                                    minHeight: 8,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '${widget.exercise.steps} / ${widget.exercise.stepGoal} steps',
-                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                                   ),
                                 ],
                               ),
                             ),
+                          ],
+
+                          const SizedBox(height: 20),
+
+                          // Step goal progress
+                          if (widget.exercise.steps != null &&
+                              widget.exercise.stepGoal != null) ...[
+                            _buildStepGoalCard(),
                             const SizedBox(height: 16),
                           ],
 
-                          _buildDetailRow('Exercise', widget.exercise.type.displayName),
+                          _buildDetailRow('Exercise',
+                              widget.exercise.type.displayName),
                           const Divider(height: 1),
 
                           if (hasDistance) ...[
-                            _buildDetailRow('Distance', _formatDistance(widget.exercise.distanceKm!)),
+                            _buildDetailRow('Distance',
+                                _formatDistance(
+                                    widget.exercise.distanceKm!)),
                             const Divider(height: 1),
                           ],
 
                           if (widget.exercise.steps != null) ...[
-                            _buildDetailRow('Steps', '${widget.exercise.steps} steps'),
+                            _buildDetailRow('Steps',
+                                '${widget.exercise.steps} steps'),
                             const Divider(height: 1),
                           ],
 
                           if (widget.exercise.energyExpended != null) ...[
-                            _buildDetailRow('Energy expended', '${widget.exercise.energyExpended} cal'),
+                            _buildDetailRow('Energy expended',
+                                '${widget.exercise.energyExpended} cal'),
                             const Divider(height: 1),
                           ],
 
@@ -339,21 +347,49 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                           ),
                           const Divider(height: 1),
 
-                          _buildDetailRow('Duration', '${widget.exercise.durationMinutes} min'),
+                          _buildDetailRow('Duration',
+                              '${widget.exercise.durationMinutes} min'),
                           const Divider(height: 1),
 
                           const SizedBox(height: 16),
 
-                          // FIX: display _notes (local state) so it refreshes after editing
                           if (_notes != null && _notes!.isNotEmpty) ...[
                             const Text(
                               'Note',
-                              style: TextStyle(fontSize: 13, color: Colors.grey),
+                              style: TextStyle(
+                                  fontSize: 13, color: Colors.grey),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               _notes!,
-                              style: const TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  height: 1.6,
+                                  color: Colors.black87),
+                            ),
+                          ],
+
+                          // Note edit hint for auto-detected entries
+                          if (isLocked) ...[
+                            const SizedBox(height: 16),
+                            GestureDetector(
+                              onTap: () => _showAutoNoteEditDialog(context),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit_note,
+                                      size: 16,
+                                      color: Colors.grey[400]),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _notes != null && _notes!.isNotEmpty
+                                        ? 'Edit note'
+                                        : 'Add a note',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey[400]),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ],
@@ -362,16 +398,17 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                   ),
                 ),
               ],
-            ), // end Column
+            ),
 
-            // Nav overlay for manual entries (no map) — back / delete / edit
+            // ── Nav overlay (no map) ─────────────────────────────────────────
             if (!hasRoute)
               Positioned(
                 top: 0,
                 left: 0,
                 right: 0,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
                       _buildMapButton(
@@ -385,24 +422,89 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                         onTap: () => _confirmDelete(context),
                       ),
                       const SizedBox(width: 8),
+                      // Edit: locked entries only allow title+notes edit
                       _buildMapButton(
-                        icon: Icons.edit,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  AddExerciseView(exercise: widget.exercise),
-                            ),
-                          );
-                        },
+                        icon: isLocked ? Icons.edit_note : Icons.edit,
+                        iconColor: isLocked
+                            ? Colors.grey[600]!
+                            : Colors.black87,
+                        onTap: isLocked
+                            ? () => _showAutoNoteEditDialog(context)
+                            : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => AddExerciseView(
+                                exercise: widget.exercise),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
           ],
-        ), // end Stack
+        ),
+      ),
+    );
+  }
+
+  // ── Widget helpers ──────────────────────────────────────────────────────────
+
+  Widget _buildStepGoalCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                widget.exercise.steps! >= widget.exercise.stepGoal!
+                    ? Icons.check_circle
+                    : Icons.flag,
+                color: widget.exercise.steps! >= widget.exercise.stepGoal!
+                    ? Colors.green
+                    : Colors.orange,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                widget.exercise.steps! >= widget.exercise.stepGoal!
+                    ? '🎉 Step Goal Achieved!'
+                    : 'Step Goal Progress',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: widget.exercise.steps! >= widget.exercise.stepGoal!
+                      ? Colors.green[700]
+                      : Colors.orange[700],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: (widget.exercise.steps! / widget.exercise.stepGoal!)
+                .clamp(0.0, 1.0),
+            backgroundColor: Colors.grey[300],
+            valueColor: AlwaysStoppedAnimation<Color>(
+              widget.exercise.steps! >= widget.exercise.stepGoal!
+                  ? Colors.green
+                  : Colors.orange,
+            ),
+            minHeight: 8,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${widget.exercise.steps} / ${widget.exercise.stepGoal} steps',
+            style:
+            const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          ),
+        ],
       ),
     );
   }
@@ -414,8 +516,13 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87)),
-          Text(value, style: const TextStyle(fontSize: 14, color: Colors.black87)),
+              style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87)),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 14, color: Colors.black87)),
         ],
       ),
     );
@@ -434,25 +541,125 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8)],
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.1), blurRadius: 8)
+          ],
         ),
         child: Icon(icon, color: iconColor, size: 20),
       ),
     );
   }
 
-  String _getEndTime() {
-    final endTime = widget.exercise.startTime.add(Duration(minutes: widget.exercise.durationMinutes));
-    final hour = endTime.hour;
-    final minute = endTime.minute.toString().padLeft(2, '0');
-    final period = hour >= 12 ? 'pm' : 'am';
-    final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-    return '$displayHour:$minute $period';
+  Widget _buildMarker(IconData icon, Color color) {
+    return Container(
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 6,
+              offset: const Offset(0, 2))
+        ],
+      ),
+      child: Icon(icon, color: Colors.white, size: 20),
+    );
   }
 
-  // FIX: GPS entries only allow editing title + notes.
-  // All sensor data (distance, steps, calories, duration, type, routePoints)
-  // are preserved exactly via copyWith — they are never shown as editable fields.
+  void _showLockedSnackbar(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+            'Sensor data is read-only for auto-detected walks. You can still edit the title and notes.'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ── Auto-detected: only allow title + notes edit ────────────────────────────
+  void _showAutoNoteEditDialog(BuildContext context) {
+    final titleController = TextEditingController(text: _title);
+    final notesController = TextEditingController(text: _notes ?? '');
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit Walk'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: notesController,
+              textCapitalization: TextCapitalization.sentences,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Steps, distance, and duration cannot be changed.',
+              style:
+              TextStyle(fontSize: 11, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newTitle = titleController.text.trim().isEmpty
+                  ? _title
+                  : titleController.text.trim();
+              final newNotes = notesController.text.trim().isEmpty
+                  ? null
+                  : notesController.text.trim();
+
+              // Only title and notes are updated — all sensor data is preserved.
+              final updated = widget.exercise.copyWith(
+                title: newTitle,
+                notes: newNotes,
+              );
+
+              final ctrl =
+              Provider.of<ExerciseController>(context, listen: false);
+              await ctrl.updateExercise(updated);
+
+              Navigator.pop(dialogContext);
+              if (mounted) {
+                setState(() {
+                  _title = newTitle;
+                  _notes = newNotes;
+                });
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7C6FDC),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Live-tracked GPS edit (title + notes only, preserves route) ─────────────
   void _showLiveEditDialog(BuildContext context) {
     final titleController = TextEditingController(text: _title);
     final notesController = TextEditingController(text: _notes ?? '');
@@ -498,20 +705,16 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                   ? null
                   : notesController.text.trim();
 
-              // copyWith preserves routePoints, distanceKm, steps, energyExpended,
-              // durationMinutes, type, startTime — nothing sensor-related is touched.
               final updated = widget.exercise.copyWith(
                 title: newTitle,
                 notes: newNotes,
               );
 
-              final controller =
+              final ctrl =
               Provider.of<ExerciseController>(context, listen: false);
-              await controller.updateExercise(updated);
+              await ctrl.updateExercise(updated);
 
               Navigator.pop(dialogContext);
-
-              // Refresh local display state without Navigator rebuild
               if (mounted) {
                 setState(() {
                   _title = newTitle;
@@ -536,7 +739,8 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Delete Exercise'),
-          content: const Text('Are you sure you want to delete this exercise?'),
+          content: const Text(
+              'Are you sure you want to delete this exercise?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
@@ -559,7 +763,8 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                   ),
                 );
               },
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+              child:
+              const Text('Delete', style: TextStyle(color: Colors.red)),
             ),
           ],
         );

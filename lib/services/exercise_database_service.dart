@@ -24,14 +24,13 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 2, // FIX: bumped from 1 → 2 to trigger onUpgrade
+      version: 3, // bumped from 2 → 3 to add isAutoDetected column
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    // FIX: Added stepGoal, distanceGoal, timeGoal columns that were missing
     await db.execute('''
       CREATE TABLE exercises (
         id TEXT PRIMARY KEY,
@@ -47,21 +46,25 @@ class DatabaseService {
         createdAt TEXT NOT NULL,
         stepGoal INTEGER,
         distanceGoal REAL,
-        timeGoal INTEGER
+        timeGoal INTEGER,
+        isAutoDetected INTEGER NOT NULL DEFAULT 0
       )
     ''');
   }
 
-  // FIX: Migrate existing installs that are on version 1 (missing goal columns)
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE exercises ADD COLUMN stepGoal INTEGER');
       await db.execute('ALTER TABLE exercises ADD COLUMN distanceGoal REAL');
       await db.execute('ALTER TABLE exercises ADD COLUMN timeGoal INTEGER');
     }
+    if (oldVersion < 3) {
+      await db.execute(
+        'ALTER TABLE exercises ADD COLUMN isAutoDetected INTEGER NOT NULL DEFAULT 0',
+      );
+    }
   }
 
-  // Create - Insert new exercise
   Future<String> insertExercise(Exercise exercise) async {
     final db = await database;
     final id = DateTime.now().millisecondsSinceEpoch.toString();
@@ -77,7 +80,6 @@ class DatabaseService {
     return id;
   }
 
-  // Read - Get all exercises
   Future<List<Exercise>> getAllExercises() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -90,7 +92,6 @@ class DatabaseService {
     });
   }
 
-  // Read - Get exercise by ID
   Future<Exercise?> getExerciseById(String id) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -103,7 +104,6 @@ class DatabaseService {
     return Exercise.fromJson(maps.first);
   }
 
-  // Read - Get exercises by date range
   Future<List<Exercise>> getExercisesByDateRange(
       DateTime start,
       DateTime end,
@@ -121,7 +121,6 @@ class DatabaseService {
     });
   }
 
-  // Read - Get exercises by type
   Future<List<Exercise>> getExercisesByType(ExerciseType type) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -136,7 +135,6 @@ class DatabaseService {
     });
   }
 
-  // Update - Update existing exercise
   Future<int> updateExercise(Exercise exercise) async {
     final db = await database;
     return await db.update(
@@ -147,7 +145,6 @@ class DatabaseService {
     );
   }
 
-  // Delete - Delete exercise by ID
   Future<int> deleteExercise(String id) async {
     final db = await database;
     return await db.delete(
@@ -157,20 +154,17 @@ class DatabaseService {
     );
   }
 
-  // Delete - Delete all exercises
   Future<int> deleteAllExercises() async {
     final db = await database;
     return await db.delete('exercises');
   }
 
-  // Get total count of exercises
   Future<int> getExerciseCount() async {
     final db = await database;
     final result = await db.rawQuery('SELECT COUNT(*) FROM exercises');
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  // Close database
   Future<void> close() async {
     final db = await database;
     await db.close();

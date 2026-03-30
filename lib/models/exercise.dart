@@ -30,6 +30,30 @@ extension ExerciseTypeExtension on ExerciseType {
     }
   }
 
+  /// Soft tinted background for exercise cards, classified by type.
+  Color get cardBackground {
+    switch (this) {
+      case ExerciseType.walking:
+        return const Color(0xFFFFF0F3); // soft rose
+      case ExerciseType.running:
+        return const Color(0xFFEDF7ED); // soft mint
+      case ExerciseType.jogging:
+        return const Color(0xFFF3F0FF); // soft lavender
+    }
+  }
+
+  /// Accent / border color for the card's left indicator strip.
+  Color get cardAccent {
+    switch (this) {
+      case ExerciseType.walking:
+        return const Color(0xFFE91E63); // deep rose
+      case ExerciseType.running:
+        return const Color(0xFF43A047); // deep green
+      case ExerciseType.jogging:
+        return const Color(0xFF7C6FDC); // deep purple
+    }
+  }
+
   IconData get icon {
     switch (this) {
       case ExerciseType.walking:
@@ -52,13 +76,18 @@ class Exercise {
   int? energyExpended;
   int? steps;
   String? notes;
-  List<Map<String, double>>? routePoints; // For GPS tracking
+  List<Map<String, double>>? routePoints;
   DateTime createdAt;
 
-  // Goal fields (optional pre-set goals)
+  // Goal fields
   int? stepGoal;
   double? distanceGoal;
-  int? timeGoal; // in minutes
+  int? timeGoal;
+
+  /// True when this entry was created by the auto-detection system.
+  /// Auto-detected entries are read-only: steps, distance, and duration
+  /// are locked and cannot be edited after saving.
+  bool isAutoDetected;
 
   Exercise({
     this.id,
@@ -75,8 +104,8 @@ class Exercise {
     this.stepGoal,
     this.distanceGoal,
     this.timeGoal,
+    this.isAutoDetected = false,
   }) : createdAt = createdAt ?? DateTime.now() {
-    // Auto-generate title if empty
     if (title.isEmpty) {
       title = _generateDefaultTitle();
     }
@@ -85,7 +114,6 @@ class Exercise {
   String _generateDefaultTitle() {
     final timeOfDay = startTime.hour;
     String period;
-
     if (timeOfDay < 12) {
       period = 'Morning';
     } else if (timeOfDay < 17) {
@@ -95,11 +123,9 @@ class Exercise {
     } else {
       period = 'Night';
     }
-
     return '$period ${type.displayName}';
   }
 
-  // Convert to JSON for database storage
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -111,24 +137,25 @@ class Exercise {
       'energyExpended': energyExpended,
       'steps': steps,
       'notes': notes,
-      'routePoints': routePoints != null ? jsonEncode(routePoints) : null,  // NEW
+      'routePoints': routePoints != null ? jsonEncode(routePoints) : null,
       'createdAt': createdAt.toIso8601String(),
       'stepGoal': stepGoal,
       'distanceGoal': distanceGoal,
       'timeGoal': timeGoal,
+      // Store as integer (SQLite has no boolean)
+      'isAutoDetected': isAutoDetected ? 1 : 0,
     };
   }
 
-  // Create Exercise from JSON
   factory Exercise.fromJson(Map<String, dynamic> json) {
-
-    ///linked
     List<Map<String, double>>? parseRoutePoints(dynamic routeData) {
       if (routeData == null) return null;
       if (routeData is String) {
         try {
           final decoded = jsonDecode(routeData) as List;
-          return decoded.map((point) => Map<String, double>.from(point as Map)).toList();
+          return decoded
+              .map((point) => Map<String, double>.from(point as Map))
+              .toList();
         } catch (e) {
           return null;
         }
@@ -146,24 +173,15 @@ class Exercise {
       energyExpended: json['energyExpended'],
       steps: json['steps'],
       notes: json['notes'],
-
-
-      // routePoints: json['routePoints'] != null
-      //     ? List<Map<String, double>>.from(
-      //     json['routePoints'].map((point) => Map<String, double>.from(point)))
-      //     : null,
-
-      ///linked with a helper
       routePoints: parseRoutePoints(json['routePoints']),
-
       createdAt: DateTime.parse(json['createdAt']),
       stepGoal: json['stepGoal'],
       distanceGoal: json['distanceGoal']?.toDouble(),
       timeGoal: json['timeGoal'],
+      isAutoDetected: (json['isAutoDetected'] ?? 0) == 1,
     );
   }
 
-  // Copy with method for updates
   Exercise copyWith({
     String? id,
     String? title,
@@ -179,6 +197,7 @@ class Exercise {
     int? stepGoal,
     double? distanceGoal,
     int? timeGoal,
+    bool? isAutoDetected,
   }) {
     return Exercise(
       id: id ?? this.id,
@@ -195,46 +214,43 @@ class Exercise {
       stepGoal: stepGoal ?? this.stepGoal,
       distanceGoal: distanceGoal ?? this.distanceGoal,
       timeGoal: timeGoal ?? this.timeGoal,
+      isAutoDetected: isAutoDetected ?? this.isAutoDetected,
     );
   }
 
-  // Format distance for display
   String get formattedDistance {
     if (distanceKm == null) return '';
     return '${distanceKm!.toStringAsFixed(2)} km';
   }
 
-  // Format duration for display
-  String get formattedDuration {
-    return '$durationMinutes min';
-  }
+  String get formattedDuration => '$durationMinutes min';
 
-  // Format steps for display
   String get formattedSteps {
     if (steps == null) return '';
     return '${steps!.toStringAsFixed(0)} steps';
   }
 
-  // Format calories for display
   String get formattedCalories {
     if (energyExpended == null) return '';
     return '$energyExpended cal';
   }
 
-  // Get formatted date
   String get formattedDate {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
-    final exerciseDate = DateTime(startTime.year, startTime.month, startTime.day);
+    final exerciseDate =
+    DateTime(startTime.year, startTime.month, startTime.day);
 
     if (exerciseDate == today) {
       return 'Today';
     } else if (exerciseDate == yesterday) {
       return 'Yesterday';
     } else {
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
       return '${_getDayName(exerciseDate.weekday)} ${exerciseDate.day} ${months[exerciseDate.month - 1]}';
     }
   }
@@ -244,7 +260,6 @@ class Exercise {
     return days[weekday - 1];
   }
 
-  // Get formatted time
   String get formattedTime {
     final hour = startTime.hour;
     final minute = startTime.minute.toString().padLeft(2, '0');
